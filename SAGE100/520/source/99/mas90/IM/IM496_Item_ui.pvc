@@ -1,0 +1,73 @@
+! $Id: IM496_Item_ui.pvc 8803 2015-02-27 18:14:25Z sdneupau $
+! IM Item UI Class
+! (c)2014-2015 Sage Software, Inc. All Rights Reserved. Sage 100 v2015
+! (c)2021 Blytheco. All Rights Reserved. Sage 100 v2015
+DEF CLASS "IM496_Item_ui" CREATE REQUIRED DELETE REQUIRED 
+! Inherits from the following class(es)
+LIKE "IM_Item_ui"
+! Public Properties
+! Local/Private Properties
+! Public Functions (Methods)
+FUNCTION LOCAL PostLoadpMain()POST_LOAD_pMAIN
+FUNCTION LOCAL PERFORM LoadLB_SO_Inquiry()LOAD_LB_SO_INQUIRY
+FUNCTION LOCAL SalesOrderInvoiced496(SALES_ORDER_NO$)SALES_ORDER_INVOICED_496
+! Local/Private Functions (Methods)
+LOCAL SO_SalesOrder_bus496
+LOCAL SO_Invoice_svc496
+! Global / Main dialog functions
+! Elements Defined Elsewhere, but Referenced Locally
+END DEF
+ON_CREATE:
+RETURN 
+ON_DELETE:
+IF SO_SalesOrder_bus496 THEN DROP OBJECT SO_SalesOrder_bus496,ERR=*PROCEED; LET SO_SalesOrder_bus496=0
+IF SO_Invoice_svc496 THEN DROP OBJECT SO_Invoice_svc496,ERR=*PROCEED; LET SO_Invoice_svc496=0
+RETURN 
+POST_LOAD_pMAIN:
+! 
+LET retVal_050=_obj'PostLoadpMain(FROM "IM496_Item_ui_BASE")
+IF retVal_050 THEN {
+_obj'SetControlState("G49639439.GRP$",ctlSHOW)
+ }
+RETURN retVal_050
+! -------------------------------------------------------------- 
+LOAD_LB_SO_INQUIRY: ! ****
+LET retVal_050=_obj'LoadLB_SO_Inquiry(FROM "IM496_Item_ui_BASE")
+IF retVal_050 THEN {
+LET COUNT=1,EOF_496=isFALSE; DIM COL_496$[100]; LET COL_IOL_496$=CPL("IOLIST COL_496$[ALL]")
+WHILE NOT(EOF_496)
+LET SO_INQUIRY_REC496$=""
+LIST_BOX FIND LB_SO_Inquiry.ctl,COUNT,SO_INQUIRY_REC496$,ERR=*NEXT
+IF NOT(NUL(STP(SO_INQUIRY_REC496$))) THEN {
+READ DATA FROM SO_INQUIRY_REC496$ TO IOL=COL_IOL_496$
+LET BATCH_496$=""
+IF _obj'SalesOrderInvoiced496(COL_496$[1]) THEN {
+LET BATCH_496$="Y"
+LET COL_496$[13]=BATCH_496$
+LIST_BOX LOAD LB_SO_Inquiry.ctl,COUNT,*
+LIST_BOX LOAD LB_SO_Inquiry.ctl,COUNT,REC(COL_IOL_496$)
+ }
+LET COUNT=COUNT+1
+ } ELSE {
+LET EOF_496=isTRUE
+ }
+WEND 
+ }
+RETURN retVal_050
+! --------------------------------------------------------------
+SALES_ORDER_INVOICED_496:
+ENTER (SALES_ORDER_NO$)
+IF NOT(SO_SalesOrder_bus496) THEN {
+LET SO_SalesOrder_bus496=NEW("SO_SalesOrder_svc",coSession)
+ }
+IF NOT(SO_Invoice_svc496) THEN {
+LET SO_Invoice_svc496=NEW("SO_Invoice_svc",coSession)
+ }
+SO_SalesOrder_bus496'Find(SALES_ORDER_NO$)
+SO_SalesOrder_bus496'GetValue("CurrentInvoiceNo$",INVOICE_NO_496$)
+IF NOT(NUL(STP(INVOICE_NO_496$))) THEN {
+SO_Invoice_svc496'Find(INVOICE_NO_496$)
+SO_Invoice_svc496'GetValue("SalesOrderNo$",invoice496.orderNo496$)
+IF invoice496.orderNo496$=SALES_ORDER_NO$ THEN LET retVal_050=isTRUE
+ }
+RETURN retVal_050

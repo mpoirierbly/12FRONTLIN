@@ -1,0 +1,60 @@
+ ! Sage 100 ERP Common SO Data entry UI Object
+ ! (c)2014-2015 Sage Software, Inc. All Rights Reserved. Sage 100 v2015
+ ! $Id: SO496_CommonEntry_ui.pvc 10759 2015-08-05 22:57:43Z ndchang $
+ DEF CLASS "SO496_CommonEntry_UI" CREATE REQUIRED DELETE REQUIRED
+ ! Inherits from the follwing class(es)
+ LIKE "SO_CommonEntry_UI"
+ ! Public Properties
+ ! Local Methods
+ FUNCTION LOCAL ClassOnFocusGrid(gridCtl_050)CLASS_ON_FOCUS_GRID
+ FUNCTION LOCAL WarehouseRestricted_496(WAREHOUSE_CODE$,BIN_LOCATION$)WAREHOUSE_RESTRICTED_496
+ ! Local Variables
+ LOCAL cIM_ItemWarehouse_ch496
+ LOCAL cIM404_ItemLocationQuantity_ch496
+ LOCAL cIM404_BinLocation_ch496
+ ! Local Variable - Defined Elsewhere, but Referenced Locally
+ END DEF
+ ON_CREATE:
+ RETURN
+ ON_DELETE:
+ IF cIM_ItemWarehouse_ch496 THEN CLOSE (cIM_ItemWarehouse_ch496); LET cIM_ItemWarehouse_ch496=0
+ IF cIM404_ItemLocationQuantity_ch496 THEN CLOSE (cIM404_ItemLocationQuantity_ch496); LET cIM404_ItemLocationQuantity_ch496=0
+ IF cIM404_BinLocation_ch496 THEN CLOSE (cIM404_BinLocation_ch496)
+ RETURN
+ CLASS_ON_FOCUS_GRID:
+ ENTER gridCtl_050
+ LET retVal_050=_obj'ClassOnFocusGrid(FROM "SO496_CommonEntry_UI_BASE",gridCtl_050)
+ IF POS("Net Available"=ML_STATUS$) AND NOT("In Bins:"=ML_STATUS$) THEN {
+ coHeader'Lines'GetValue("ItemCode$",ITEM_CODE$)
+ coHeader'Lines'GetValue("WarehouseCode$",WAREHOUSE_CODE$)
+ IF NOT(NUL(STP(ITEM_CODE$))) AND NOT(NUL(STP(WAREHOUSE_CODE$))) THEN {
+ IF NOT(cIM_ItemWarehouse_ch496) THEN {
+ LET cIM_ItemWarehouse_ch496=coSession'OpenTable("IM_ItemWarehouse","COMPANY")
+  }
+ IF NOT(IM404_ItemLocationQuantity_ch496) THEN {
+ LET cIM404_ItemLocationQuantity_ch496=coSession'OpenTable("IM404_ItemLocationQuantity","COMPANY",ERR=*NEXT)
+  }
+ IF NOT(NOT(cIM_ItemWarehouse_ch496)) AND NOT(NOT(cIM404_ItemLocationQuantity_ch496)) THEN {
+ LET IN_BINS=0
+ READ DATA FROM "",REC=IM404_ItemLocationQuantity_REC496$ TO IOL=IOL(cIM404_ItemLocationQuantity_ch496)
+ SELECT *,REC=IM404_ItemLocationQuantity_REC496$ FROM cIM404_ItemLocationQuantity_ch496 BEGIN ITEM_CODE$:WAREHOUSE_CODE$ END ITEM_CODE$:WAREHOUSE_CODE$:$FE$ WHERE NOT(_obj'WarehouseRestricted_496(IM404_ItemLocationQuantity_REC496.WarehouseCode$,IM404_ItemLocationQuantity_REC496.BinLocation$))
+ LET IN_BINS=IN_BINS+IM404_ItemLocationQuantity_REC496.QuantityOnHand-IM404_ItemLocationQuantity_REC496.QuantityAllocated
+ NEXT RECORD
+ LET ML_STATUS$=ML_STATUS$+", In Bins: "+STR(IN_BINS)
+  }
+  }
+  }
+ RETURN retVal_050
+ ! ----------------------------------------------------------------------------------------
+ WAREHOUSE_RESTRICTED_496:
+ ENTER (WAREHOUSE_CODE$),(BIN_LOCATION$)
+ LET retVal_050=isFALSE
+ IF NOT(cIM404_BinLocation_ch496) THEN {
+ LET cIM404_BinLocation_ch496=coSession'OpenTable("IM404_BinLocation","COMPANY",ERR=*NEXT)
+  }
+ IF NOT(NOT(cIM404_BinLocation_ch496)) THEN {
+ READ DATA FROM "",REC=IM404_BinLocation_REC496$ TO IOL=IOL(cIM404_BinLocation_ch496)
+ READ (cIM404_BinLocation_ch496,KEY=WAREHOUSE_CODE$:BIN_LOCATION$,REC=IM404_BinLocation_REC496$,DOM=*NEXT)
+ IF IM404_BinLocation_REC496.DisableInSO$="Y" THEN LET retVal_050=isTRUE
+  }
+ RETURN retVal_050

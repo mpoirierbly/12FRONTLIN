@@ -1,0 +1,69 @@
+ ! $Id: SO496_PickingSheetPrinting_rpt.pvc 8328 2015-02-05 19:25:25Z jjkaranj $
+ ! Sage 100 ERP Report Object for Picking Sheet Printing
+ ! (c)2014-2015 Sage Software, Inc. All Rights Reserved. Sage 100 v2015
+ DEF CLASS "SO496_PickingSheetPrinting_rpt" CREATE REQUIRED DELETE REQUIRED
+ ! Inherits from the Following Class(es)
+ LIKE "SO_PickingSheetPrinting_rpt"
+ ! Public Properties
+ ! Local/Private Properties
+ LOCAL cSO_SalesOrderDetail_ch496
+ LOCAL cSO404_OrderTierDist_ch496
+ ! Public Functions (Methods)
+ ! Local/Private Functions (Methods)
+ FUNCTION PERFORM LOCAL PreWorkTableWrite()PRE_WORK_TABLE_WRITE
+ FUNCTION LOCAL GetKitItem_496$(SALES_ORDER_NO$,SALES_KIT_LINE_KEY$)GET_KIT_ITEM_496
+ FUNCTION LOCAL GetDistributed_496(SALES_ORDER_NO$,LINE_KEY$,LOT_SERIAL_NO$)GET_DISTRIBUTED_496
+ ! Elements Defined Elsewhere, but Referenced Locally
+ END DEF
+ ON_CREATE:
+ RETURN
+ ON_DELETE:
+ IF cSO_SalesOrderDetail_ch496 THEN CLOSE (cSO_SalesOrderDetail_ch496); LET cSO_SalesOrderDetail_ch496=0
+ IF cSO404_OrderTierDist_ch496 THEN CLOSE (cSO404_OrderTierDist_ch496); LET cSO404_OrderTierDist_ch496=0
+ RETURN
+ PRE_WORK_TABLE_WRITE:
+ LET retVal_050=_obj'PreWorkTableWrite(FROM "SO496_PickingSheetPrinting_rpt_BASE")
+ LET wrk.UDF_49638386_KIT_ITEM$=""
+ IF retVal_050 THEN {
+ IF NOT(NUL(STP(SalesKitLineKey$))) THEN {
+ IF SalesKitLineKey$<>LineKey$ THEN {
+ LET wrk.UDF_49638386_KIT_ITEM$=_obj'GetKitItem_496$(SalesOrderNo$,SalesKitLineKey$)
+  }
+  }
+  }
+ ! Ticket 39753
+ IF NOT(NUL(STP(SalesKitLineKey$))) THEN {
+ IF SalesKitLineKey$<>LineKey$ THEN { ! This is a Component Line
+ LET QUANTITY_DISTRIBUTED=_obj'GetDistributed_496(wrk.SalesOrderNo$,LineKey$,wrk.LotSerialNo$)
+ LET wrk.UDF_49639752_INSUFFICIENT_QUAN$="N"
+ IF wrk.OrderType$="B" THEN {
+ IF QUANTITY_DISTRIBUTED<wrk.QuantityBackOrdered THEN LET wrk.UDF_49639752_INSUFFICIENT_QUAN$="Y"
+  } ELSE {
+ IF QUANTITY_DISTRIBUTED<wrk.QuantityOrdered THEN LET wrk.UDF_49639752_INSUFFICIENT_QUAN$="Y"
+  }
+  }
+  }
+ RETURN retVal_050
+ ! ---------------------------------------------------------------------------------
+ GET_KIT_ITEM_496:
+ ENTER (SALES_ORDER_NO$),(SALES_KIT_LINE_KEY$)
+ IF NOT(cSO_SalesOrderDetail_ch496) THEN {
+ LET cSO_SalesOrderDetail_ch496=coSession'OpenTable("SO_SalesOrderDetail","COMPANY")
+  }
+ READ DATA FROM "",REC=SO_SalesOrderDetail_REC496$ TO IOL=IOL(cSO_SalesOrderDetail_ch496)
+ READ (cSO_SalesOrderDetail_ch496,KEY=SALES_ORDER_NO$:SALES_KIT_LINE_KEY$,REC=SO_SalesOrderDetail_REC496$,DOM=*NEXT)
+ LET retVal_050$=SO_SalesOrderDetail_REC496.ItemCode$
+ RETURN retVal_050$
+ ! ---------------------------------------------------------------------------------
+ GET_DISTRIBUTED_496:
+ ENTER (SALES_ORDER_NO$),(LINE_KEY$),(LOT_SERIAL_NO$)
+ IF NOT(cSO404_OrderTierDist_ch496) THEN {
+ LET cSO404_OrderTierDist_ch496=coSession'OpenTable("SO404_OrderTierDist","COMPANY")
+  }
+ LET BIN_QUANTITY_DISTRIBUTED=0
+ READ DATA FROM "",REC=SO404_OrderTierDist_REC496$ TO IOL=IOL(cSO404_OrderTierDist_ch496)
+ SELECT *,REC=SO404_OrderTierDist_REC496$ FROM cSO404_OrderTierDist_ch496 BEGIN SALES_ORDER_NO$:LINE_KEY$:LOT_SERIAL_NO$ END SALES_ORDER_NO$:LINE_KEY$:LOT_SERIAL_NO$:$FE$
+ LET BIN_QUANTITY_DISTRIBUTED=BIN_QUANTITY_DISTRIBUTED+SO404_OrderTierDist_REC496.QuantityOrdered
+ NEXT RECORD
+ LET retVal_050=BIN_QUANTITY_DISTRIBUTED
+ RETURN retVal_050

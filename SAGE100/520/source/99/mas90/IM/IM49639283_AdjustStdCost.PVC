@@ -1,0 +1,41 @@
+DEF CLASS "IM49639283_AdjustStdCost" CREATE REQUIRED DELETE REQUIRED 
+LIKE "SY_Common"
+FUNCTION PROCESS()PROCESS
+END DEF
+! ----------------------------------------------------------------------
+ON_CREATE:
+! 
+RETURN 
+! ----------------------------------------------------------------------
+ON_DELETE:
+! 
+RETURN 
+! ----------------------------------------------------------------------
+PROCESS:
+! 
+PRECISION 6
+SETERR ERROR_UNABLE_TO_OPEN_FILE
+LET CI_Item_ch=%SYS_SS'OpenTable("CI_Item","COMPANY")
+SETERR 0000
+LET CI_ItemCode_bus=NEW("CI_ItemCode_bus",%SYS_SS)
+%SYS_SS'UI'PROGRESSBAR("init","Adjusting Standard Costs...","",ISFALSE)
+READ DATA FROM "",REC=CI_Item_REC$ TO IOL=IOL(CI_Item_ch)
+SELECT *,REC=CI_Item_REC$ FROM CI_Item_ch BEGIN $$ END $FE$
+%SYS_SS'UI'PROGRESSBAR("update")
+IF CI_Item_REC.LastTotalUnitCost-CI_Item_REC.LastAllocatedUnitCost>CI_Item_REC.StandardUnitCost THEN {
+LET retVal=CI_ItemCode_bus'SetKeyValue("ItemCode$",CI_Item_REC.ItemCode$)
+IF retVal THEN LET retVal=CI_ItemCode_bus'SetKey()
+IF retVal=1 THEN {
+LET retVal=CI_ItemCode_bus'GetValue("LastTotalUnitCost",LAST_TOTAL_UNIT_COST)
+LET retVal=CI_ItemCode_bus'GetValue("LastAllocatedUnitCost",LAST_ALLOCATED_UNIT_COST)
+LET retVal=CI_ItemCode_bus'SetValue("StandardUnitCost",LAST_TOTAL_UNIT_COST-LAST_ALLOCATED_UNIT_COST) ! Set Standard Cost to Last Cost
+LET retVal=CI_ItemCode_bus'Write()
+ }
+ }
+NEXT RECORD 
+%SYS_SS'UI'PROGRESSBAR("close")
+LET CMD_STR$="END"
+RETURN 
+ERROR_UNABLE_TO_OPEN_FILE:
+LET CMD_STR$="END"
+RETURN 

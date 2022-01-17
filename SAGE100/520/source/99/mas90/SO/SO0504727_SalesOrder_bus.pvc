@@ -1,0 +1,235 @@
+! Sage 100 ERP S/O Sales Order Entry Header Business Object
+! (c)2014-2015 Sage Software, Inc. All Rights Reserved. Sage 100 v2015
+! (c)Faye Business Systems Group, Inc. 2017. All Rights Reserved. Sage 100 v2015
+! $Id: SO_SalesOrder_bus.pvc 8717 2015-02-24 19:18:05Z khmackal $
+DEF CLASS "SO0504727_SalesOrder_Bus" CREATE REQUIRED DELETE REQUIRED 
+! Inheritance
+LIKE "SO_SalesOrder_Bus"
+LIKE "SY050_ENHActivation" ! ***** ENHANCEMENT ACTIVATION *****
+! Public Properties
+! Public Methods
+FUNCTION WRITE()WRITE
+! Local Methods
+FUNCTION LOCAL SalesOrderLinesShareSameWarehouse()SALES_ORDER_LINES_SHARE_SAME_WAREHOUSE
+FUNCTION LOCAL AllLinesAre000or001()ALL_LINES_ARE_000_OR_001
+FUNCTION LOCAL GetUsableWarehouseCode$()GET_USABLE_WAREHOUSE_CODE
+FUNCTION LOCAL MoveLinesToWarehouse(ELIGIBLE_WAREHOUSE$)MOVE_LINES_TO_WAREHOUSE
+FUNCTION LOCAL MoveLinesToWarehouse(ELIGIBLE_WAREHOUSE$,OVERRIDE_WAREHOUSE_FLAG)MOVE_LINES_TO_WAREHOUSE
+FUNCTION LOCAL GetShipVia$()GET_SHIP_VIA
+FUNCTION LOCAL ItemsShortAvailability()ITEMS_SHORT_AVAILABILITY
+FUNCTION LOCAL WarehouseOverride_496()WAREHOUSE_OVERRIDE_496
+! 
+FUNCTION LOCAL WarehouseRestricted_496(WAREHOUSE_CODE$,BIN_LOCATION$)WAREHOUSE_RESTRICTED_496
+FUNCTION LOCAL GetDistributed_496(SALES_ORDER_NO$,LINE_KEY$,LOT_SERIAL_NO$)GET_DISTRIBUTED_496
+! Local Variables
+LOCAL cIM_Warehouse_ch050
+LOCAL cIM_ItemWarehouse_ch050
+LOCAL cQuantityAvailableToInclude_050$
+LOCAL cCI_Item_ch496
+LOCAL cOverrideWarehouse$="001"
+! 
+LOCAL cIM404_ItemLocationQuantity_ch496
+LOCAL cIM404_BinLocation_ch496
+LOCAL cSO404_OrderTierDist_ch496
+! Local Variables - Defined Elsewhere, but Referenced Locally
+END DEF
+ON_CREATE:
+LET %ACTIVE_SO0504727=_OBJ'CHECKACTIVATION("SO-050-4727COrder Routing by Warehouse based Item Avail  ")-1
+IF %ACTIVE_SO0504727 THEN {
+coSession'GetParameter("I/M","QuantityAvailableToInclude$",cQuantityAvailableToInclude_050$)
+ }
+RETURN 
+ON_DELETE:
+IF cIM_Warehouse_ch050 THEN CLOSE (cIM_Warehouse_ch050); LET cIM_Warehouse_ch050=0
+IF cIM_ItemWarehouse_ch050 THEN CLOSE (cIM_ItemWarehouse_ch050); LET cIM_ItemWarehouse_ch050=0
+IF cCI_Item_ch496 THEN CLOSE (cCI_Item_ch496); LET cCI_Item_ch496=0
+IF cIM404_ItemLocationQuantity_ch496 THEN CLOSE (cIM404_ItemLocationQuantity_ch496)
+IF cIM404_BinLocation_ch496 THEN CLOSE (cIM404_BinLocation_ch496)
+IF cSO404_OrderTierDist_ch496 THEN CLOSE (cSO404_OrderTierDist_ch496); LET cSO404_OrderTierDist_ch496=0
+RETURN 
+! -----------------------------------------------------------
+WRITE:
+IF %ACTIVE_SO0504727 THEN {
+IF _OBJ'EditState=edtNEW THEN {
+IF UCS(STP(_OBJ'GetShipVia$()))<>UCS(STP("Will Call")) THEN {
+IF NOT(_OBJ'WarehouseOverride_496()) THEN { ! If Warehouse Override condtion exists, do not apply Warehouse Reallocation
+IF _OBJ'ItemsShortAvailability() THEN {
+LET ELIGIBLE_WAREHOUSE$=""
+LET ELIGIBLE_WAREHOUSE$=_OBJ'GetUsableWarehouseCode$()
+IF NOT(NUL(STP(ELIGIBLE_WAREHOUSE$))) THEN {
+_OBJ'MoveLinesToWarehouse(ELIGIBLE_WAREHOUSE$)
+_OBJ'SetValue("WarehouseCode$",ELIGIBLE_WAREHOUSE$)
+_OBJ'SetValue("UDF_49639828_WAREHOUSE_CHANGED$","Y")
+ }
+ }
+ }
+ }
+ }
+ }
+LET retVal_050=_OBJ'WRITE(FROM "SO0504727_SalesOrder_Bus_BASE")
+RETURN retVal_050
+! -----------------------------------------------------------
+ALL_LINES_ARE_000_OR_001:
+LET retVal_050=retSUCCESS
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF)
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+IF SO_SalesOrderDetail_REC050.WarehouseCode$<>"000" AND SO_SalesOrderDetail_REC050.WarehouseCode$<>"001" THEN {
+LET retVal_050=retFAILURE
+ }
+_OBJ'lines'MOVENEXT()
+WEND 
+RETURN retVal_050
+! -----------------------------------------------------------
+SALES_ORDER_LINES_SHARE_SAME_WAREHOUSE:
+LET WAREHOUSE$=""
+LET retVal_050=retSUCCESS
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF)
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+IF WAREHOUSE$="" THEN LET WAREHOUSE$=SO_SalesOrderDetail_REC050.WarehouseCode$
+IF WAREHOUSE$<>SO_SalesOrderDetail_REC050.WarehouseCode$ THEN LET retVal_050=retFAILURE ! Not all lines share same Warehouse Code
+_OBJ'lines'MOVENEXT()
+WEND 
+RETURN retVal_050
+! -----------------------------------------------------------
+GET_SHIP_VIA:
+LET SHIP_VIA$=""
+_OBJ'GetValue("ShipVia",SHIP_VIA$)
+LET retVal_050$=SHIP_VIA$
+RETURN retVal_050$
+! -----------------------------------------------------------
+ITEMS_SHORT_AVAILABILITY:
+LET retVal_050=isFALSE
+IF NOT(cIM_ItemWarehouse_ch050) THEN {
+LET cIM_ItemWarehouse_ch050=coSession'OpenTable("IM_ItemWarehouse","COMPANY")
+ }
+IF NOT(cIM404_ItemLocationQuantity_ch496) THEN {
+LET cIM404_ItemLocationQuantity_ch496=coSession'OpenTable("IM404_ItemLocationQuantity","COMPANY",ERR=*NEXT)
+ }
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF)
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+IF SO_SalesOrderDetail_REC050.WarehouseCode$="000" OR SO_SalesOrderDetail_REC050.WarehouseCode$="001" THEN {
+! 
+LET IN_BINS=0
+READ DATA FROM "",REC=IM404_ItemLocationQuantity_REC496$ TO IOL=IOL(cIM404_ItemLocationQuantity_ch496)
+SELECT *,REC=IM404_ItemLocationQuantity_REC496$ FROM cIM404_ItemLocationQuantity_ch496 BEGIN SO_SalesOrderDetail_REC050.ItemCode$:SO_SalesOrderDetail_REC050.WarehouseCode$ END SO_SalesOrderDetail_REC050.ItemCode$:SO_SalesOrderDetail_REC050.WarehouseCode$:$FE$ WHERE NOT(_OBJ'WarehouseRestricted_496(IM404_ItemLocationQuantity_REC496.WarehouseCode$,IM404_ItemLocationQuantity_REC496.BinLocation$))
+LET IN_BINS=IN_BINS+IM404_ItemLocationQuantity_REC496.QuantityOnHand-IM404_ItemLocationQuantity_REC496.QuantityAllocated
+NEXT RECORD 
+LET LINE_QUANTITY_DISTRIBUTED=_OBJ'GetDistributed_496(SO_SalesOrderDetail_REC050.SalesOrderNo$,SO_SalesOrderDetail_REC050.LineKey$,"")
+IF SO_SalesOrderDetail_REC050.QuantityOrdered-LINE_QUANTITY_DISTRIBUTED>IN_BINS THEN LET retVal_050=isTRUE
+! 
+ }
+_OBJ'lines'MOVENEXT()
+WEND 
+RETURN retVal_050
+! -----------------------------------------------------------
+GET_USABLE_WAREHOUSE_CODE:
+LET retVal_050$=""
+IF NOT(cIM_Warehouse_ch050) THEN {
+LET cIM_Warehouse_ch050=coSession'OpenTable("IM_Warehouse","COMPANY")
+ }
+IF NOT(cIM_ItemWarehouse_ch050) THEN {
+LET cIM_ItemWarehouse_ch050=coSession'OpenTable("IM_ItemWarehouse","COMPANY")
+ }
+IF NOT(cIM404_ItemLocationQuantity_ch496) THEN {
+LET cIM404_ItemLocationQuantity_ch496=coSession'OpenTable("IM404_ItemLocationQuantity","COMPANY",ERR=*NEXT)
+ }
+SELECT *,REC=IM_Warehouse_REC050$ FROM cIM_Warehouse_ch050 BEGIN $$ END $FE$ WHERE IM_Warehouse_REC050.WarehouseCode$="000" OR IM_Warehouse_REC050.WarehouseCode$="001"
+LET WAREHOUSE_ELIGIBLE=isTRUE
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF)
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+IF SO_SalesOrderDetail_REC050.WarehouseCode$="000" OR SO_SalesOrderDetail_REC050.WarehouseCode$="001" THEN {
+! 
+LET IN_BINS=0
+READ DATA FROM "",REC=IM404_ItemLocationQuantity_REC496$ TO IOL=IOL(cIM404_ItemLocationQuantity_ch496)
+SELECT *,REC=IM404_ItemLocationQuantity_REC496$ FROM cIM404_ItemLocationQuantity_ch496 BEGIN SO_SalesOrderDetail_REC050.ItemCode$:SO_SalesOrderDetail_REC050.WarehouseCode$ END SO_SalesOrderDetail_REC050.ItemCode$:SO_SalesOrderDetail_REC050.WarehouseCode$:$FE$ WHERE NOT(_OBJ'WarehouseRestricted_496(IM404_ItemLocationQuantity_REC496.WarehouseCode$,IM404_ItemLocationQuantity_REC496.BinLocation$))
+LET IN_BINS=IN_BINS+IM404_ItemLocationQuantity_REC496.QuantityOnHand-IM404_ItemLocationQuantity_REC496.QuantityAllocated
+NEXT RECORD 
+IF IN_BINS<0 THEN LET WAREHOUSE_ELIGIBLE=isFALSE
+! 
+ }
+_OBJ'lines'MOVENEXT()
+WEND 
+IF WAREHOUSE_ELIGIBLE THEN {
+LET retVal_050$=IM_Warehouse_REC050.WarehouseCode$ ! Eligible warehouse found
+BREAK
+ }
+NEXT RECORD 
+RETURN retVal_050$
+! -----------------------------------------------------------
+MOVE_LINES_TO_WAREHOUSE:
+ENTER (ELIGIBLE_WAREHOUSE$),(OVERRIDE_WAREHOUSE_FLAG),ERR=*NEXT
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF)
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+IF SO_SalesOrderDetail_REC050.WarehouseCode$<>ELIGIBLE_WAREHOUSE$ THEN {
+IF SO_SalesOrderDetail_REC050.WarehouseCode$="000" OR SO_SalesOrderDetail_REC050.WarehouseCode$="001" THEN {
+_OBJ'lines'SetValue("WarehouseCode$",ELIGIBLE_WAREHOUSE$)
+_OBJ'lines'WRITE()
+ }
+ }
+_OBJ'lines'MOVENEXT()
+WEND 
+RETURN retVal_050
+! -----------------------------------------------------------
+WAREHOUSE_OVERRIDE_496:
+LET retVal_050=isFALSE
+LET WAREHOUSE_OVERRIDE_EXISTS=isFALSE
+LET OVERRIDE_ITEM_FROM_000_OR_001=isFALSE
+IF NOT(cCI_Item_ch496) THEN {
+LET cCI_Item_ch496=coSession'OpenTable("CI_Item","COMPANY")
+ }
+_OBJ'lines'MOVEFIRST()
+WHILE NOT(_OBJ'lines'EOF) AND WAREHOUSE_OVERRIDE_EXISTS=isFALSE
+_OBJ'lines'GETRECORD(LINESREC$,LINESIOL$)
+READ DATA FROM LINESREC$,REC=SO_SalesOrderDetail_REC050$ TO IOL=LINESIOL$
+READ DATA FROM "",REC=CI_Item_REC496$ TO IOL=IOL(cCI_Item_ch496)
+READ (cCI_Item_ch496,KEY=SO_SalesOrderDetail_REC050.ItemCode$,REC=CI_Item_REC496$,DOM=*NEXT)
+IF CI_Item_REC496.UDF_49639439_WAREHOUSE_OVERRID$=isYES$ THEN {
+LET WAREHOUSE_OVERRIDE_EXISTS=isTRUE
+IF SO_SalesOrderDetail_REC050.WarehouseCode$="000" OR SO_SalesOrderDetail_REC050.WarehouseCode$="001" THEN LET OVERRIDE_ITEM_FROM_000_OR_001=isTRUE
+ }
+_OBJ'lines'MOVENEXT()
+WEND 
+IF WAREHOUSE_OVERRIDE_EXISTS=isTRUE AND NOT(NUL(STP(cOverrideWarehouse$))) THEN {
+IF OVERRIDE_ITEM_FROM_000_OR_001=isTRUE THEN {
+_OBJ'MoveLinesToWarehouse(cOverrideWarehouse$,isTRUE)
+_OBJ'SetValue("WarehouseCode$",cOverrideWarehouse$)
+ }
+LET retVal_050=isTRUE
+ }
+RETURN retVal_050
+! ----------------------------------------------------------------------------------------
+WAREHOUSE_RESTRICTED_496:
+ENTER (WAREHOUSE_CODE$),(BIN_LOCATION$)
+LET retVal_050=isFALSE
+IF NOT(cIM404_BinLocation_ch496) THEN {
+LET cIM404_BinLocation_ch496=coSession'OpenTable("IM404_BinLocation","COMPANY",ERR=*NEXT)
+ }
+IF NOT(NOT(cIM404_BinLocation_ch496)) THEN {
+READ DATA FROM "",REC=IM404_BinLocation_REC496$ TO IOL=IOL(cIM404_BinLocation_ch496)
+READ (cIM404_BinLocation_ch496,KEY=WAREHOUSE_CODE$:BIN_LOCATION$,REC=IM404_BinLocation_REC496$,DOM=*NEXT)
+IF IM404_BinLocation_REC496.DisableInSO$="Y" THEN LET retVal_050=isTRUE
+ }
+RETURN retVal_050
+! ---------------------------------------------------------------------------------
+GET_DISTRIBUTED_496:
+ENTER (SALES_ORDER_NO$),(LINE_KEY$),(LOT_SERIAL_NO$)
+IF NOT(cSO404_OrderTierDist_ch496) THEN {
+LET cSO404_OrderTierDist_ch496=coSession'OpenTable("SO404_OrderTierDist","COMPANY")
+ }
+LET BIN_QUANTITY_DISTRIBUTED=0
+READ DATA FROM "",REC=SO404_OrderTierDist_REC496$ TO IOL=IOL(cSO404_OrderTierDist_ch496)
+SELECT *,REC=SO404_OrderTierDist_REC496$ FROM cSO404_OrderTierDist_ch496 BEGIN SALES_ORDER_NO$:LINE_KEY$:LOT_SERIAL_NO$ END SALES_ORDER_NO$:LINE_KEY$:LOT_SERIAL_NO$:$FE$
+LET BIN_QUANTITY_DISTRIBUTED=BIN_QUANTITY_DISTRIBUTED+SO404_OrderTierDist_REC496.QuantityOrdered
+NEXT RECORD 
+LET retVal_050=BIN_QUANTITY_DISTRIBUTED
+RETURN retVal_050

@@ -1,0 +1,112 @@
+! Sage 100 ERP Sales Order Entry UI Object
+! (c)2014-2015 Sage Software, Inc. All Rights Reserved. Sage 100 v2015
+! (c)Blutheco,Inc. 2021
+! $Id: SO496_SalesOrder_ui.pvc 7705 2014-12-08 18:56:09Z ndchang $
+DEF CLASS "SO496_SalesOrder_UI" CREATE REQUIRED DELETE REQUIRED 
+! Inherits from the following class(es)
+LIKE "SO_SalesOrder_UI"
+! Public Properties
+! Public Methods
+! Local Methods
+FUNCTION LOCAL EnablepHeaderControls()ENABLE_PHEADER_CONTROLS
+FUNCTION LOCAL ClassChangeShipTo(ctlID_496)CLASS_CHANGE_SHIP_TO
+FUNCTION LOCAL ShipToAddressOnHold_496(DIVISION_NO$,CUSTOMER_NO$,SHIP_TO_CODE$)SHIP_TO_ADDRESS_ON_HOLD_496
+FUNCTION LOCAL ChangeOrderStatus()CHANGE_ORDER_STATUS
+FUNCTION LOCAL ChangeML_Customer()CHANGE_ML_CUSTOMER
+FUNCTION LOCAL PostReadRec()POST_READ_REC
+! Local Variables
+LOCAL cSE_SO496AllowAccessToSalesOrderStatus
+LOCAL SO_ShipToAddress_ch496
+END DEF
+ON_CREATE:
+LET cSE_SO496AllowAccessToSalesOrderStatus=coSession'CheckSecurityEvent("SE496_SOSTATUS")
+RETURN 
+ON_DELETE:
+IF SO_ShipToAddress_ch496 THEN CLOSE (SO_ShipToAddress_ch496); LET SO_ShipToAddress_ch496=0
+RETURN 
+! -----------------------------------------------------------------------
+ENABLE_PHEADER_CONTROLS:
+LET retVal_050=_obj'EnablepHeaderControls(FROM "SO496_SalesOrder_UI_BASE")
+IF NOT(cSE_SO496AllowAccessToSalesOrderStatus) THEN {
+coBusiness'GetValue("OrderStatus$",ORDER_STATUS_496$)
+coBusiness'GetValue("CancelReasonCode$",REASON_CODE_496$)
+IF ORDER_STATUS_496$="H" AND REASON_CODE_496$="CH" THEN {
+_obj'SetControlState("G496_39749.GRP$",ctlDISABLE)
+ }
+ }
+RETURN retVal_050
+! -----------------------------------------------------------------------
+CLASS_CHANGE_SHIP_TO:
+ENTER ctlID_496
+LET retVal_050=_obj'ClassChangeShipTo(FROM "SO496_SalesOrder_UI_BASE",ctlID_496)
+IF retVal_050 THEN {
+IF NOT(NUL(STP(SHIPTOCODE$))) THEN {
+IF _obj'ShipToAddressOnHold_496(ARDIVISIONNO$,CUSTOMERNO$,SHIPTOCODE$) THEN {
+LET OrderStatus$="H"; _obj'ChangeOrderStatus(); coBusiness'SetValue("OrderStatus$","H") ! Put Sales Order On Hold
+LET CANCELREASONCODE$="CH"; coBusiness'SetValue("CANCELREASONCODE$",CANCELREASONCODE$); LET REFRESH_FLG=1
+IF NOT(cSE_SO496AllowAccessToSalesOrderStatus) THEN {
+coSession'UI'MessageBox$($$,"This Ship To Address is On Hold. Please contact AR to resolve. Press OK to continue.")
+_obj'SetControlState("G496_39749.GRP$",ctlDISABLE)
+ }
+ }
+ }
+ }
+RETURN retVal_050
+! -----------------------------------------------------------------------
+SHIP_TO_ADDRESS_ON_HOLD_496:
+ENTER (DIVISION_NO$),(CUSTOMER_NO$),(SHIP_TO_CODE$)
+LET retVal_050=isFALSE
+IF NOT(SO_ShipToAddress_ch496) THEN {
+LET SO_ShipToAddress_ch496=coSession'OpenTable("SO_ShipToAddress","COMPANY")
+ }
+READ DATA FROM "",REC=SO_ShipToAddress_REC496$ TO IOL=IOL(SO_ShipToAddress_ch496)
+READ (SO_ShipToAddress_ch496,KEY=DIVISION_NO$:CUSTOMER_NO$:SHIP_TO_CODE$,REC=SO_ShipToAddress_REC496$,DOM=*NEXT)
+IF SO_ShipToAddress_REC496.UDF_CREDIT_HOLD$=msgYES$ THEN LET retVal_050=isTRUE
+RETURN retVal_050
+! -----------------------------------------------------------------------
+CHANGE_ORDER_STATUS:
+LET retVal_050=_obj'ChangeOrderStatus(FROM "SO496_SalesOrder_UI_BASE")
+IF NOT(cSE_SO496AllowAccessToSalesOrderStatus) THEN {
+coBusiness'GetValue("OrderStatus$",ORDER_STATUS_496$)
+coBusiness'GetValue("CancelReasonCode$",REASON_CODE_496$)
+IF ORDER_STATUS_496$="H" AND REASON_CODE_496$="CH" THEN {
+DISABLE CONTROL CancelReasonCode.ctl,CancelReasonCode.ctl+3000
+ }
+ }
+RETURN retVal_050
+! -----------------------------------------------------------------------
+CHANGE_ML_CUSTOMER:
+LET retVal_050=_obj'ChangeML_Customer(FROM "SO496_SalesOrder_UI_BASE")
+IF retVal_050 THEN {
+IF NOT(NUL(STP(SHIPTOCODE$))) THEN {
+IF _obj'ShipToAddressOnHold_496(ARDIVISIONNO$,CUSTOMERNO$,SHIPTOCODE$) THEN {
+IF NOT(cSE_SO496AllowAccessToSalesOrderStatus) THEN {
+coSession'UI'MessageBox$($$,"This Ship To Address is On Hold. Please contact AR to resolve. Press OK to continue.")
+_obj'SetControlState("G496_39749.GRP$",ctlDISABLE)
+ }
+LET OrderStatus$="H"; coBusiness'SetValue("OrderStatus$","H") ! Put Sales Order On Hold
+LET CANCELREASONCODE$="CH"; coBusiness'SetValue("CANCELREASONCODE$",CANCELREASONCODE$); LET REFRESH_FLG=1
+ }
+ }
+ }
+RETURN retVal_050
+! -----------------------------------------------------------------------
+POST_READ_REC:
+LET retVal_050=_obj'PostReadRec(FROM "SO496_SalesOrder_UI_BASE")
+IF UCS(STP(coSession'StartProgram$))="SO_SALESORDER_UI" THEN {
+coBusiness'GetValue("OrderStatus$",ORDER_STATUS_496$)
+coBusiness'GetValue("CancelReasonCode$",REASON_CODE_496$)
+IF ORDER_STATUS_496$="H" AND REASON_CODE_496$="CH" THEN {
+_obj'SetControlState("G496_39749.GRP$",ctlDISABLE)
+IF cSE_SO496AllowAccessToSalesOrderStatus THEN {
+SWITCH cSecurityAccess
+CASE secCREATEONLY,secMODIFYONLY,secCREATEMODIFY,secCREATEDELETE,secMODIFYDELETE,secFULLACCESS
+_obj'SetControlState("G496_39749.GRP$",ctlENABLE)
+BREAK
+END SWITCH 
+ } ELSE {
+coSession'UI'MessageBox$($$,"This Ship To Address is On Hold. Please contact AR to resolve. Press OK to continue.")
+ }
+ }
+ }
+RETURN retVal_050
